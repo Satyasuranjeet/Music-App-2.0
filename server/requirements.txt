@@ -1,3 +1,5 @@
-flask
+Flask
+Flask-PyMongo
+flask-cors
 requests
-werkzeug
+pymongo
