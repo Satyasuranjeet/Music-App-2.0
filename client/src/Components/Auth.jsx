@@ -22,7 +22,7 @@ const Auth = ({ onLogin }) => {
 
     const verifyToken = async (token) => {
         try {
-            const response = await fetch('https://music-app-2-0.onrender.com//verify-token', {
+            const response = await fetch('https://music-app-2-0.onrender.com/verify-token', {
                 headers: { 
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
@@ -64,7 +64,7 @@ const Auth = ({ onLogin }) => {
 
         setIsLoading(true);
         try {
-            const response = await fetch('https://music-app-2-0.onrender.com//register', {
+            const response = await fetch('https://music-app-2-0.onrender.com/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, name, password }),
@@ -92,7 +92,7 @@ const Auth = ({ onLogin }) => {
 
         setIsLoading(true);
         try {
-            const response = await fetch('https://music-app-2-0.onrender.com//send-otp', {
+            const response = await fetch('https://music-app-2-0.onrender.com/send-otp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email }),
@@ -120,7 +120,7 @@ const Auth = ({ onLogin }) => {
 
         setIsLoading(true);
         try {
-            const response = await fetch('https://music-app-2-0.onrender.com//verify-otp', {
+            const response = await fetch('https://music-app-2-0.onrender.com/verify-otp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
