@@ -25,7 +25,7 @@ const MusicPlayer = ({userId}) => {
 
         // Initial song fetch with default query
         setIsLoading(true);
-        fetch('https://music-app-2-0.vercel.app/songs?query=Believer')
+        fetch('https://music-app-2-0.onrender.com//songs?query=Believer')
             .then(response => {
                 if (!response.ok) throw new Error('Network response was not ok');
                 return response.json();
@@ -172,7 +172,7 @@ const MusicPlayer = ({userId}) => {
 
     const handleSearch = () => {
         setIsLoading(true);
-        fetch(`https://music-app-2-0.vercel.app/songs?query=${encodeURIComponent(searchQuery)}`)
+        fetch(`https://music-app-2-0.onrender.com//songs?query=${encodeURIComponent(searchQuery)}`)
             .then(response => response.json())
             .then(data => setSongs(data))
             .catch(error => {

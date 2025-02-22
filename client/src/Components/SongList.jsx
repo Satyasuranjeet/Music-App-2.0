@@ -26,7 +26,7 @@ const SongList = ({ songs = [], isLoading, currentSong, playSong, userId }) => {
     const fetchPlaylists = async () => {
         setLoadingPlaylists(true);
         try {
-            const response = await fetch(`https://music-app-2-0.vercel.app/playlists?user_id=${userId}`);
+            const response = await fetch(`https://music-app-2-0.onrender.com//playlists?user_id=${userId}`);
             if (!response.ok) {
                 throw new Error('Failed to fetch playlists');
             }
@@ -46,7 +46,7 @@ const SongList = ({ songs = [], isLoading, currentSong, playSong, userId }) => {
         console.log(`Adding song ${song.id} to playlist ${playlistId}`);
     
         try {
-            const response = await fetch('https://music-app-2-0.vercel.app/playlists/add-song', {
+            const response = await fetch('https://music-app-2-0.onrender.com//playlists/add-song', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

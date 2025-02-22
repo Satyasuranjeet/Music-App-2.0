@@ -61,7 +61,7 @@ const Playlists = ({ userId, onPlaySong }) => {
         }
 
         try {
-            const response = await fetch(`https://music-app-2-0.vercel.app/playlists/${playlistId}`, {
+            const response = await fetch(`https://music-app-2-0.onrender.com//playlists/${playlistId}`, {
                 method: 'DELETE',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ user_id: userId }),
@@ -85,7 +85,7 @@ const Playlists = ({ userId, onPlaySong }) => {
     const handleRemoveSong = async (playlistId, songId, event) => {
         event.stopPropagation();
         try {
-            const response = await fetch(`https://music-app-2-0.vercel.app/playlists/${playlistId}/remove-song`, {
+            const response = await fetch(`https://music-app-2-0.onrender.com//playlists/${playlistId}/remove-song`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -133,7 +133,7 @@ const Playlists = ({ userId, onPlaySong }) => {
     const fetchPlaylists = async () => {
         setIsLoading(true);
         try {
-            const response = await fetch(`https://music-app-2-0.vercel.app/playlists?user_id=${userId}`);
+            const response = await fetch(`https://music-app-2-0.onrender.com//playlists?user_id=${userId}`);
             const data = await response.json();
             setPlaylists(data);
         } catch (error) {
@@ -149,7 +149,7 @@ const Playlists = ({ userId, onPlaySong }) => {
         }
 
         try {
-            const response = await fetch('https://music-app-2-0.vercel.app/playlists', {
+            const response = await fetch('https://music-app-2-0.onrender.com//playlists', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ user_id: userId, name: newPlaylistName }),

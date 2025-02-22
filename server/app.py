@@ -8,6 +8,7 @@ import string
 from flask_cors import CORS
 import re
 import jwt
+import os
 
 app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
@@ -385,4 +386,5 @@ def remove_song_from_playlist(playlist_id):
         return jsonify({"error": f"Server error: {str(e)}"}), 500
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    port = int(os.environ.get("PORT", 5000))  # Use PORT from environment, default to 5000
+    app.run(host="0.0.0.0", port=port, debug=True)
