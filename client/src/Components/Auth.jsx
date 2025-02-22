@@ -1,22 +1,92 @@
-import { useState } from 'react';
-import { Loader, Mail, KeyRound, Music2, User } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Loader, Mail, KeyRound, Music2, User, Lock } from 'lucide-react';
 import { toast } from 'react-hot-toast';
 
 const Auth = ({ onLogin }) => {
     const [email, setEmail] = useState('');
     const [name, setName] = useState('');
+    const [password, setPassword] = useState('');
+    const [confirmPassword, setConfirmPassword] = useState('');
     const [otp, setOtp] = useState('');
-    const [step, setStep] = useState(1); // 1: Enter name and email, 2: Enter OTP
+    const [isRegistering, setIsRegistering] = useState(false);
+    const [step, setStep] = useState(1); // 1: Initial, 2: OTP, 3: Complete Registration
     const [isLoading, setIsLoading] = useState(false);
 
-    const handleSendOtp = async () => {
-        if (!email) {
-            toast.error('Please enter your email');
+    useEffect(() => {
+        // Check for existing JWT token on component mount
+        const token = localStorage.getItem('jstream_token');
+        if (token) {
+            verifyToken(token);
+        }
+    }, []);
+
+    const verifyToken = async (token) => {
+        try {
+            const response = await fetch('https://music-app-2-0.vercel.app/verify-token', {
+                headers: { 
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                }
+            });
+            const data = await response.json();
+            
+            if (data.valid) {
+                onLogin(data.user_id, data.user_name);
+            } else {
+                localStorage.removeItem('jstream_token');
+            }
+        } catch (error) {
+            localStorage.removeItem('jstream_token');
+        }
+    };
+
+    const validateEmail = (email) => {
+        return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    };
+
+    const handleRegistration = async () => {
+        if (!validateEmail(email)) {
+            toast.error('Please enter a valid email');
             return;
         }
-        
+        if (password.length < 8) {
+            toast.error('Password must be at least 8 characters long');
+            return;
+        }
+        if (password !== confirmPassword) {
+            toast.error('Passwords do not match');
+            return;
+        }
         if (!name) {
             toast.error('Please enter your name');
+            return;
+        }
+
+        setIsLoading(true);
+        try {
+            const response = await fetch('https://music-app-2-0.vercel.app/register', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email, name, password }),
+            });
+            const data = await response.json();
+            
+            if (data.message) {
+                toast.success('Registration started! Please verify your email.');
+                setStep(2);
+            } else {
+                toast.error(data.error || 'Registration failed');
+            }
+        } catch (error) {
+            toast.error('Registration failed');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    const handleLogin = async () => {
+        if (!validateEmail(email)) {
+            toast.error('Please enter a valid email');
             return;
         }
 
@@ -25,9 +95,10 @@ const Auth = ({ onLogin }) => {
             const response = await fetch('https://music-app-2-0.vercel.app/send-otp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, name }),
+                body: JSON.stringify({ email }),
             });
             const data = await response.json();
+            
             if (data.message) {
                 toast.success('OTP sent successfully!');
                 setStep(2);
@@ -52,17 +123,23 @@ const Auth = ({ onLogin }) => {
             const response = await fetch('https://music-app-2-0.vercel.app/verify-otp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ email, otp }),
+                body: JSON.stringify({ 
+                    email, 
+                    otp,
+                    isRegistering
+                }),
             });
             const data = await response.json();
-            if (data.user_id && data.user_name) {
-                toast.success('Login successful!');
+            
+            if (data.token) {
+                localStorage.setItem('jstream_token', data.token);
+                toast.success(isRegistering ? 'Registration successful!' : 'Login successful!');
                 onLogin(data.user_id, data.user_name);
             } else {
                 toast.error('Invalid OTP');
             }
         } catch (error) {
-            toast.error('Failed to verify OTP');
+            toast.error('Verification failed');
         } finally {
             setIsLoading(false);
         }
@@ -79,7 +156,8 @@ const Auth = ({ onLogin }) => {
                         Welcome to JStream
                     </h2>
                     <p className="text-gray-400 text-center mt-2">
-                        {step === 1 ? 'Enter your details to get started' : 'Enter the OTP sent to your email'}
+                        {step === 1 ? (isRegistering ? 'Create your account' : 'Sign in to your account') : 
+                         step === 2 ? 'Enter the OTP sent to your email' : 'Complete your registration'}
                     </p>
                 </div>
 
@@ -87,23 +165,26 @@ const Auth = ({ onLogin }) => {
                     <div className="flex flex-col items-center justify-center py-8">
                         <Loader className="w-8 h-8 text-blue-500 animate-spin mb-4" />
                         <p className="text-gray-400">
-                            {step === 1 ? 'Sending OTP...' : 'Verifying OTP...'}
+                            {step === 1 ? (isRegistering ? 'Starting registration...' : 'Sending OTP...') :
+                             'Verifying OTP...'}
                         </p>
                     </div>
                 ) : (
                     <div className="space-y-4">
-                        {step === 1 ? (
+                        {step === 1 && (
                             <>
-                                <div className="relative">
-                                    <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-                                    <input
-                                        type="text"
-                                        placeholder="Enter your name"
-                                        value={name}
-                                        onChange={(e) => setName(e.target.value)}
-                                        className="w-full bg-gray-800/50 border border-gray-700 rounded-full py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                    />
-                                </div>
+                                {isRegistering && (
+                                    <div className="relative">
+                                        <User className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                                        <input
+                                            type="text"
+                                            placeholder="Enter your name"
+                                            value={name}
+                                            onChange={(e) => setName(e.target.value)}
+                                            className="w-full bg-gray-800/50 border border-gray-700 rounded-full py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                        />
+                                    </div>
+                                )}
                                 <div className="relative">
                                     <Mail className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
                                     <input
@@ -112,18 +193,53 @@ const Auth = ({ onLogin }) => {
                                         value={email}
                                         onChange={(e) => setEmail(e.target.value)}
                                         className="w-full bg-gray-800/50 border border-gray-700 rounded-full py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                                        onKeyDown={(e) => e.key === 'Enter' && handleSendOtp()}
                                     />
                                 </div>
+                                {isRegistering && (
+                                    <>
+                                        <div className="relative">
+                                            <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                                            <input
+                                                type="password"
+                                                placeholder="Create password"
+                                                value={password}
+                                                onChange={(e) => setPassword(e.target.value)}
+                                                className="w-full bg-gray-800/50 border border-gray-700 rounded-full py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            />
+                                        </div>
+                                        <div className="relative">
+                                            <Lock className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
+                                            <input
+                                                type="password"
+                                                placeholder="Confirm password"
+                                                value={confirmPassword}
+                                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                                className="w-full bg-gray-800/50 border border-gray-700 rounded-full py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                                            />
+                                        </div>
+                                    </>
+                                )}
                                 <button
-                                    onClick={handleSendOtp}
+                                    onClick={isRegistering ? handleRegistration : handleLogin}
                                     className="w-full bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-full transition-all flex items-center justify-center gap-2"
                                 >
-                                    <Mail size={18} />
-                                    Send OTP
+                                    {isRegistering ? <User size={18} /> : <Mail size={18} />}
+                                    {isRegistering ? 'Register' : 'Send OTP'}
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        setIsRegistering(!isRegistering);
+                                        setPassword('');
+                                        setConfirmPassword('');
+                                    }}
+                                    className="w-full text-gray-400 hover:text-gray-300 py-2 transition-all text-sm"
+                                >
+                                    {isRegistering ? 'Already have an account? Sign in' : 'Need an account? Register'}
                                 </button>
                             </>
-                        ) : (
+                        )}
+                        
+                        {step === 2 && (
                             <>
                                 <div className="relative">
                                     <KeyRound className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
@@ -150,7 +266,7 @@ const Auth = ({ onLogin }) => {
                                     }}
                                     className="w-full text-gray-400 hover:text-gray-300 py-2 transition-all text-sm"
                                 >
-                                    Back to enter details
+                                    Back to {isRegistering ? 'registration' : 'login'}
                                 </button>
                             </>
                         )}

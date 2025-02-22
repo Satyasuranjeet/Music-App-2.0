@@ -14,7 +14,8 @@ const App = () => {
         setUserName(name);
     };
 
-    const handleLogout = () => {
+    const handleLogout = async () => {
+        localStorage.removeItem('jstream_token');
         setUserId(null);
         setUserName(null);
     };

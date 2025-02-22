@@ -7,12 +7,14 @@ import random
 import string
 from flask_cors import CORS
 import re
+import jwt
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*": {"origins": "*"}})
 
-# MongoDB configuration
+# Configuration
 app.config["MONGO_URI"] = "mongodb+srv://satya:satya@cluster0.8thgg4a.mongodb.net/music_app"
+app.config['JWT_SECRET_KEY'] = 'asdgFASdgSGsgSgDfgDSGewT#4g42u4ET32$u'  # Change in production
 mongo = PyMongo(app)
 
 # Email API configuration
@@ -32,6 +34,15 @@ def home():
         }
     })
 
+def generate_jwt_token(user_id, email, name):
+    payload = {
+        'user_id': str(user_id),
+        'email': email,
+        'name': name,
+        'exp': datetime.utcnow() + timedelta(days=30)
+    }
+    return jwt.encode(payload, app.config['JWT_SECRET_KEY'], algorithm='HS256')
+
 def generate_otp():
     return ''.join(random.choices(string.digits, k=6))
 
@@ -39,20 +50,177 @@ def is_valid_email(email):
     pattern = r'^[\w\.-]+@[\w\.-]+\.\w+$'
     return re.match(pattern, email) is not None
 
-def fetch_song_data(query):
+@app.route('/verify-token', methods=['GET'])
+def verify_token():
+    token = None
+    auth_header = request.headers.get('Authorization')
+
+    if auth_header and auth_header.startswith('Bearer '):
+        token = auth_header.split(" ")[1]
+
+    if not token:
+        return jsonify({'error': 'Token is missing'}), 401
+
     try:
-        url = f'https://saavn.dev/api/search/songs?query={query}'
-        response = requests.get(url, timeout=10)  # Added timeout
+        data = jwt.decode(token, app.config['JWT_SECRET_KEY'], algorithms=['HS256'])
+        user = mongo.db.users.find_one({'_id': ObjectId(data['user_id'])})
+        if not user:
+            return jsonify({'error': 'User not found'}), 401
+            
+        return jsonify({
+            'valid': True,
+            'user_id': str(user['_id']),
+            'user_name': user.get('name', 'User')
+        })
+    except jwt.ExpiredSignatureError:
+        return jsonify({'error': 'Token has expired'}), 401
+    except jwt.InvalidTokenError:
+        return jsonify({'error': 'Invalid token'}), 401
+
+@app.route('/register', methods=['POST'])
+def register():
+    try:
+        email = request.json.get('email')
+        password = request.json.get('password')
+        name = request.json.get('name')
+
+        if not all([email, password, name]):
+            return jsonify({"error": "All fields are required"}), 400
+
+        if not is_valid_email(email):
+            return jsonify({"error": "Invalid email format"}), 400
+
+        existing_user = mongo.db.users.find_one({"email": email})
+        if existing_user:
+            return jsonify({"error": "Email already registered"}), 400
+
+        otp = generate_otp()
+        user_data = {
+            "email": email,
+            "password": password,  # Consider hashing in production
+            "name": name,
+            "otp": otp,
+            "otp_timestamp": datetime.utcnow(),
+            "created_at": datetime.utcnow()
+        }
+        
+        mongo.db.users.insert_one(user_data)
+
+        email_payload = {
+            "receiver_email": email,
+            "subject": "Verify your JStream account",
+            "message": f"Hi {name},\n\nYour verification OTP is: {otp}\nThis OTP will expire in 10 minutes."
+        }
+        
+        response = requests.post(EMAIL_API_URL, json=email_payload)
+        if response.status_code != 200:
+            return jsonify({"error": "Failed to send verification email"}), 500
+
+        return jsonify({"message": "Registration initiated successfully"})
+    except Exception as e:
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
+
+@app.route('/send-otp', methods=['POST'])
+def send_otp():
+    try:
+        email = request.json.get('email')
+        
+        if not email:
+            return jsonify({"error": "Email is required"}), 400
+
+        if not is_valid_email(email):
+            return jsonify({"error": "Invalid email format"}), 400
+
+        user = mongo.db.users.find_one({"email": email})
+        if not user:
+            return jsonify({"error": "Email not registered"}), 404
+
+        otp = generate_otp()
+        mongo.db.users.update_one(
+            {"email": email},
+            {
+                "$set": {
+                    "otp": otp,
+                    "otp_timestamp": datetime.utcnow()
+                }
+            }
+        )
+
+        email_payload = {
+            "receiver_email": email,
+            "subject": "Your JStream Login OTP",
+            "message": f"Hi {user.get('name', 'User')},\n\nYour login OTP is: {otp}\nThis OTP will expire in 10 minutes."
+        }
+        
+        response = requests.post(EMAIL_API_URL, json=email_payload)
+        if response.status_code != 200:
+            return jsonify({"error": "Failed to send OTP"}), 500
+
+        return jsonify({"message": "OTP sent successfully"})
+    except Exception as e:
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
+
+@app.route('/verify-otp', methods=['POST'])
+def verify_otp():
+    try:
+        email = request.json.get('email')
+        otp = request.json.get('otp')
+        is_registering = request.json.get('isRegistering', False)
+
+        if not email or not otp:
+            return jsonify({"error": "Email and OTP are required"}), 400
+
+        user = mongo.db.users.find_one({
+            "email": email,
+            "otp": otp,
+            "otp_timestamp": {"$gte": datetime.utcnow() - timedelta(minutes=10)}
+        })
+        
+        if not user:
+            return jsonify({"error": "Invalid or expired OTP"}), 400
+
+        # Clear OTP after successful verification
+        mongo.db.users.update_one(
+            {"email": email},
+            {
+                "$unset": {"otp": "", "otp_timestamp": ""},
+                "$set": {
+                    "last_login": datetime.utcnow(),
+                    "email_verified": True
+                }
+            }
+        )
+
+        # Generate JWT token
+        token = generate_jwt_token(user['_id'], email, user.get('name', 'User'))
+
+        return jsonify({
+            "message": "Verification successful",
+            "token": token,
+            "user_id": str(user["_id"]),
+            "user_name": user.get("name", "User")
+        })
+    except Exception as e:
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
+
+@app.route('/songs', methods=['GET'])
+def get_songs():
+    query = request.args.get('query', 'Believer')
+    if not query:
+        return jsonify({"error": "No song name provided"}), 400
+    
+    try:
+        url = f'https://saavn.dev/api/search/songs?query={query}&limit={20}'
+        response = requests.get(url, timeout=10)
         
         if response.status_code == 200:
             data = response.json()
             
             if data.get("success"):
                 songs = []
-                
                 for song in data['data']['results']:
                     song_data = {
-                        'id': song.get('id'),  # Generate unique ID for each song
+                        'id': song.get('id'),
                         'title': song.get('name'),
                         'mp3_url': None,
                         'thumbnail_url': None,
@@ -70,115 +238,27 @@ def fetch_song_data(query):
                             if image.get('quality') == '500x500':
                                 song_data['thumbnail_url'] = image.get('url')
                                 break
-                        
+                    
                     songs.append(song_data)
-
-                return songs
-            return {"error": "No results found"}
+                return jsonify(songs)
+            return jsonify({"error": "No results found"}), 404
     except requests.RequestException as e:
-        return {"error": f"Failed to fetch data: {str(e)}"}
-    return {"error": "Unknown error occurred"}
-
-@app.route('/songs', methods=['GET'])
-def get_songs():
-    query = request.args.get('query', 'Believer')
-    
-    if not query:
-        return jsonify({"error": "No song name provided"}), 400
-    
-    songs = fetch_song_data(query)
-    if "error" in songs:
-        return jsonify(songs), 400
-    return jsonify(songs)
-
-@app.route('/send-otp', methods=['POST'])
-def send_otp():
-    try:
-        email = request.json.get('email')
-        name = request.json.get('name', 'User')  # Default to 'User' if name is not provided
-        
-        if not email:
-            return jsonify({"error": "Email is required"}), 400
-
-        if not is_valid_email(email):
-            return jsonify({"error": "Invalid email format"}), 400
-
-        otp = generate_otp()
-        mongo.db.users.update_one(
-            {"email": email},
-            {"$set": {"otp": otp, "otp_timestamp": datetime.now(), "name": name}},
-            upsert=True
-        )
-
-        email_payload = {
-            "receiver_email": email,
-            "subject": "Your OTP for JStream",
-            "message": f"Hi {name},\n\nYour OTP for JStream is: {otp}\nThis OTP will expire in 10 minutes."
-        }
-        
-        response = requests.post(EMAIL_API_URL, json=email_payload, timeout=10)
-        if response.status_code == 200:
-            return jsonify({"message": "OTP sent successfully"})
-        return jsonify({"error": "Failed to send OTP"}), 500
-    except Exception as e:
-        return jsonify({"error": f"Server error: {str(e)}"}), 500
-
-@app.route('/verify-otp', methods=['POST'])
-def verify_otp():
-    try:
-        email = request.json.get('email')
-        otp = request.json.get('otp')
-        if not email or not otp:
-            return jsonify({"error": "Email and OTP are required"}), 400
-
-        user = mongo.db.users.find_one({
-            "email": email,
-            "otp": otp,
-            "otp_timestamp": {"$gte": datetime.now() - timedelta(minutes=10)}
-        })
-        
-        if not user:
-            return jsonify({"error": "Invalid or expired OTP"}), 400
-
-        # Clear OTP after successful verification
-        mongo.db.users.update_one(
-            {"email": email},
-            {
-                "$unset": {"otp": "", "otp_timestamp": ""},
-                "$set": {"last_login": datetime.now()}
-            }
-        )
-
-        return jsonify({
-            "message": "OTP verified successfully",
-            "user_id": str(user["_id"]),
-            "user_name": user.get("name", "User")  # Return the user's name
-        })
-    except Exception as e:
-        return jsonify({"error": f"Server error: {str(e)}"}), 500
+        return jsonify({"error": f"Failed to fetch data: {str(e)}"}), 500
 
 @app.route('/playlists', methods=['POST'])
 def create_playlist():
     try:
         user_id = request.json.get('user_id')
         name = request.json.get('name')
+        
         if not user_id or not name:
             return jsonify({"error": "User ID and playlist name are required"}), 400
-
-        # Check if playlist name already exists for this user
-        existing_playlist = mongo.db.playlists.find_one({
-            "user_id": user_id,
-            "name": name
-        })
-        
-        if existing_playlist:
-            return jsonify({"error": "A playlist with this name already exists"}), 400
 
         playlist = {
             "user_id": user_id,
             "name": name,
             "songs": [],
-            "created_at": datetime.now()
+            "created_at": datetime.utcnow()
         }
         result = mongo.db.playlists.insert_one(playlist)
 
@@ -188,48 +268,6 @@ def create_playlist():
         })
     except Exception as e:
         return jsonify({"error": f"Server error: {str(e)}"}), 500
-
-@app.route('/playlists/add-song', methods=['POST'])
-def add_song_to_playlist():
-    try:
-        user_id = request.json.get('user_id')
-        playlist_id = request.json.get('playlist_id')
-        song_id = request.json.get('song_id')  # Keep as song_id
-
-        if not all([user_id, playlist_id, song_id]):
-            return jsonify({"error": "User ID, playlist ID, and song ID are required"}), 400
-
-        # Verify playlist belongs to user
-        playlist = mongo.db.playlists.find_one({
-            "_id": ObjectId(playlist_id),
-            "user_id": user_id
-        })
-
-        if not playlist:
-            return jsonify({"error": "Playlist not found or unauthorized"}), 404
-
-        # Check if song already exists in playlist
-        if any(existing_song.get('id') == song_id for existing_song in playlist['songs']):
-            return jsonify({"error": "Song already exists in playlist"}), 400
-
-        # For this implementation, we'll assume the song object is already available in the frontend
-        # and the complete song object is sent in the request
-        song = request.json.get('song')
-        if not song:
-            return jsonify({"error": "Song data is required"}), 400
-
-        # Add song to playlist
-        mongo.db.playlists.update_one(
-            {"_id": ObjectId(playlist_id)},
-            {"$push": {"songs": song}}
-        )
-
-        return jsonify({"message": "Song added to playlist successfully"})
-    except Exception as e:
-        return jsonify({"error": f"Server error: {str(e)}"}), 500
-
-
-
 
 @app.route('/playlists', methods=['GET'])
 def get_playlists():
@@ -250,6 +288,36 @@ def get_playlists():
     except Exception as e:
         return jsonify({"error": f"Server error: {str(e)}"}), 500
 
+@app.route('/playlists/add-song', methods=['POST'])
+def add_song_to_playlist():
+    try:
+        user_id = request.json.get('user_id')
+        playlist_id = request.json.get('playlist_id')
+        song = request.json.get('song')
+
+        if not all([user_id, playlist_id, song]):
+            return jsonify({"error": "All fields are required"}), 400
+
+        playlist = mongo.db.playlists.find_one({
+            "_id": ObjectId(playlist_id),
+            "user_id": user_id
+        })
+
+        if not playlist:
+            return jsonify({"error": "Playlist not found or unauthorized"}), 404
+
+        if any(existing_song.get('id') == song.get('id') for existing_song in playlist['songs']):
+            return jsonify({"error": "Song already exists in playlist"}), 400
+
+        mongo.db.playlists.update_one(
+            {"_id": ObjectId(playlist_id)},
+            {"$push": {"songs": song}}
+        )
+
+        return jsonify({"message": "Song added to playlist successfully"})
+    except Exception as e:
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
+
 @app.route('/playlists/<playlist_id>/songs', methods=['GET'])
 def get_playlist_songs(playlist_id):
     try:
@@ -266,6 +334,53 @@ def get_playlist_songs(playlist_id):
             return jsonify({"error": "Playlist not found or unauthorized"}), 404
 
         return jsonify(playlist.get('songs', []))
+    except Exception as e:
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
+    
+@app.route('/playlists/<playlist_id>', methods=['DELETE'])
+def delete_playlist(playlist_id):
+    try:
+        user_id = request.json.get('user_id')
+        if not user_id:
+            return jsonify({"error": "User ID is required"}), 400
+
+        playlist = mongo.db.playlists.find_one({
+            "_id": ObjectId(playlist_id),
+            "user_id": user_id
+        })
+
+        if not playlist:
+            return jsonify({"error": "Playlist not found or unauthorized"}), 404
+
+        mongo.db.playlists.delete_one({"_id": ObjectId(playlist_id)})
+
+        return jsonify({"message": "Playlist deleted successfully"})
+    except Exception as e:
+        return jsonify({"error": f"Server error: {str(e)}"}), 500
+
+@app.route('/playlists/<playlist_id>/remove-song', methods=['POST'])
+def remove_song_from_playlist(playlist_id):
+    try:
+        user_id = request.json.get('user_id')
+        song_id = request.json.get('song_id')
+
+        if not all([user_id, song_id]):
+            return jsonify({"error": "User ID and Song ID are required"}), 400
+
+        playlist = mongo.db.playlists.find_one({
+            "_id": ObjectId(playlist_id),
+            "user_id": user_id
+        })
+
+        if not playlist:
+            return jsonify({"error": "Playlist not found or unauthorized"}), 404
+
+        mongo.db.playlists.update_one(
+            {"_id": ObjectId(playlist_id)},
+            {"$pull": {"songs": {"id": song_id}}}
+        )
+
+        return jsonify({"message": "Song removed from playlist successfully"})
     except Exception as e:
         return jsonify({"error": f"Server error: {str(e)}"}), 500
 
