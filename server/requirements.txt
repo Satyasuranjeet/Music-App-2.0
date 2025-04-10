@@ -3,8 +3,4 @@ Flask-PyMongo
 flask-cors
 requests
 pymongo
-<<<<<<< HEAD
 PyJWT
-=======
-PyJWT
->>>>>>> 63f771f680be21209d540e6e2073b4ea979b3de9
