@@ -3,7 +3,13 @@
   "builds": [
     {
       "src": "app.py",
-      "use": "@vercel/python"
+      "use": "@vercel/python",
+      "config": {
+        "maxLambdaSize": "50mb",
+        "includeFiles": [
+          "requirements.txt"
+        ]
+      }
     }
   ],
   "routes": [
@@ -11,9 +17,5 @@
       "src": "/(.*)",
       "dest": "app.py"
     }
-  ],
-  "env": {
-    "MONGO_URI": "mongodb+srv://satya:satya@cluster0.8thgg4a.mongodb.net/music_app",
-    "EMAIL_API_URL": "https://emailservice-app-backend-1.onrender.com/send-email?apikey=5801402c8dbcf75d0376399992218603"
-  }
+  ]
 }
