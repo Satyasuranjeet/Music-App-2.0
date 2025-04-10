@@ -22,7 +22,7 @@ const Auth = ({ onLogin }) => {
 
     const verifyToken = async (token) => {
         try {
-            const response = await fetch('http://127.0.0.1:5000/verify-token', {
+            const response = await fetch('https://music-app-2-0.vercel.app/verify-token', {
                 headers: { 
                     'Authorization': `Bearer ${token}`,
                     'Content-Type': 'application/json'
@@ -64,7 +64,7 @@ const Auth = ({ onLogin }) => {
 
         setIsLoading(true);
         try {
-            const response = await fetch('http://127.0.0.1:5000/register', {
+            const response = await fetch('https://music-app-2-0.vercel.app/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email, name, password }),
@@ -92,7 +92,7 @@ const Auth = ({ onLogin }) => {
 
         setIsLoading(true);
         try {
-            const response = await fetch('http://127.0.0.1:5000/send-otp', {
+            const response = await fetch('https://music-app-2-0.vercel.app/send-otp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ email }),
@@ -120,7 +120,7 @@ const Auth = ({ onLogin }) => {
 
         setIsLoading(true);
         try {
-            const response = await fetch('http://127.0.0.1:5000/verify-otp', {
+            const response = await fetch('https://music-app-2-0.vercel.app/verify-otp', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ 
