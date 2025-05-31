@@ -19,7 +19,7 @@ app.config['JWT_SECRET_KEY'] = 'asdgFASdgSGsgSgDfgDSGewT#4g42u4ET32$u'  # Change
 mongo = PyMongo(app)
 
 # Email API configuration
-EMAIL_API_URL = "https://emailservice-app-backend-1.onrender.com/send-email?apikey=5801402c8dbcf75d0376399992218603"
+EMAIL_API_URL = "https://new-email-five.vercel.app/send-email?apikey=5801402c8dbcf75d0376399992218603"
 
 @app.route('/')
 def home():
